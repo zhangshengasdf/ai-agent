@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────
+# AI Agent Tutorial — .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Secrets — NEVER commit your real provider keys.
+# Copy .env.example to .env and fill in your own keys.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.log
+
+# Node / TypeScript
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tutorial evidence / internal notes (kept local, not versioned)
+.omo/evidence/

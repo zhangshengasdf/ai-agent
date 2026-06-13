@@ -1,0 +1,22 @@
+{
+  "name": "ai-agent",
+  "version": "1.0.0",
+  "description": "> **一句话**：从最原始的 API 调用出发，自己从零造一个 mini Agent 框架， > 再切换到现代框架——学完后，无论流行什么框架你都能快速上手，知识不过时。 > 全程 **Python + TypeScript 双语言并列**，**OpenAI 兼容接口可一键切换**提供商。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^6.42.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
