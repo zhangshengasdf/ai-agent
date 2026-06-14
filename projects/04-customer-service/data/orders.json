@@ -1,0 +1,23 @@
+[
+  {
+    "orderId": "ORD-001",
+    "customer": "张三",
+    "item": "MacBook Pro",
+    "status": "已发货",
+    "amount": 12999
+  },
+  {
+    "orderId": "ORD-002",
+    "customer": "李四",
+    "item": "iPhone 15 Pro",
+    "status": "待付款",
+    "amount": 8999
+  },
+  {
+    "orderId": "ORD-003",
+    "customer": "王五",
+    "item": "AirPods Pro",
+    "status": "已完成",
+    "amount": 1899
+  }
+]
