@@ -10,12 +10,12 @@
 
 学完本章，你将理解：
 
-1. **何时需要多 Agent**——以及更重要的：**何时不需要**（Anthropic 的核心建议）
+1. **何时需要多 Agent**——以及更重要的：**何时不需要**
 2. **Supervisor-Worker 模式**：Supervisor 分解任务 → 分派 Worker → Worker 汇报 → Supervisor 汇总
-3. **Agent Handoffs**：一个 Agent 把对话上下文转交给另一个 Agent（客服 → 技术专家）
-4. **共享记忆与消息传递**：多个 Agent 之间怎么共享上下文、怎么避免并发写冲突
+3. **Agent Handoffs**：一个 Agent 把对话上下文转交给另一个 Agent
+4. **共享记忆与消息传递**：多个 Agent 之间怎么共享上下文、避免并发写冲突
 5. **协作协议设计**：Agent 之间的"通信契约"
-6. **反模式**：为简单任务强上多 Agent（过度工程）、Agent 间无明确协议、共享记忆无并发控制
+6. **反模式**：过度工程、无明确协议、共享记忆无并发控制
 
 ---
 
@@ -23,9 +23,7 @@
 
 在讲"怎么编排多 Agent"之前，必须先讲 Anthropic 反复强调的一条共识：
 
-> **"从最简单的方案开始，许多场景只需优化单次 LLM 调用就够了。"**
-
-这句来自 Anthropic 的《Building Effective Agents》。它揭示了一个新手常犯的错误：
+> **"从最简单的方案开始，许多场景只需优化单次 LLM 调用就够了。"** —— Anthropic《Building Effective Agents》
 
 ```
 ❌ 错误顺序：
@@ -42,14 +40,14 @@
 
 多 Agent 引入的不是"能力"，而是**复杂度**：
 - Agent 之间的通信协议要设计
-- 上下文要在 Agent 间传递（成本和延迟都翻倍）
+- 上下文在 Agent 间传递（成本和延迟翻倍）
 - 错误处理变难（一个 Worker 崩了，整个流程怎么办？）
 - 调试变难（"为什么 Supervisor 分派给了错误的 Worker？"）
 
 **判断标准**：如果你的任务能被一个 Agent（带工具 + 规划）处理，就**别**上多 Agent。
-只有当单个 Agent 的上下文窗口、工具数量、角色职责真的"撑不住"时，多 Agent 才是合理的。
+只有当单个 Agent 的上下文窗口、工具数量、角色职责"撑不住"时，多 Agent 才合理。
 
-> 💡 **经验法则**：先问"单个 Agent 为什么搞不定？" 如果你能明确回答（工具过载 / 上下文过长 / 角色冲突 / 需要并行），再用多 Agent。如果答不上来，回去优化单 Agent。
+> 💡 **经验法则**：先问"单个 Agent 为什么搞不定？" 如果你能明确回答（工具过载 / 上下文过长 / 角色冲突 / 需要并行），再用多 Agent。答不上来，回去优化单 Agent。
 
 ---
 
@@ -74,15 +72,12 @@
 
 ### 1.2 上下文过长（Context Window Pressure）
 
-单个 Agent 把"对话历史 + 系统提示 + 工具结果"全塞进去，上下文窗口很快爆炸：
-- 成本：上下文越长，每次调用越贵（token 成本）
-- 质量："lost in the middle"——长上下文中部信息检索精度下降
-- 速度：长上下文推理更慢
+单个 Agent 把"对话历史 + 系统提示 + 工具结果"全塞进去，上下文窗口很快爆炸（成本飙升、"lost in the middle"导致中部信息检索精度下降、推理变慢）。
 
 ```
 单 Agent 处理"研究 + 写作 + 审查"：
   上下文 = [研究阶段的 50 条检索结果] + [写作初稿] + [审查意见]
-  → 几万 token，每次调用都带着这堆，又贵又慢
+  → 几万 token，又贵又慢
 
 拆成多 Agent：
   ResearchAgent 的上下文只有检索结果（用完即弃）
@@ -180,7 +175,7 @@ writer = Worker(
 **为什么有效**：
 - **system prompt 专注**：每个 Worker 只需"扮演一个角色"，不会被"既要又要"搞乱
 - **工具集精简**：每个 Worker 只看到自己需要的工具，不会选错
-- **上下文隔离**：Worker A 的工作过程不污染 Worker B 的上下文
+- **上下文隔离**：Worker A 的工作过程不污染 Worker B
 
 > 💡 **本章实现故意不用框架**（不用 CrewAI / AutoGen / LangGraph）。每个 Worker 就是一次普通的 `chat.completions.create` 调用——这样你能看清"多 Agent"在底层到底是怎么运作的，没有任何魔法。理解了底层，再用框架时就不会被"框架的抽象"困住。
 
@@ -224,11 +219,8 @@ plan = AssignmentPlan.model_validate_json(response.choices[0].message.content)
 1. 用户任务 → Supervisor
 2. Supervisor 用结构化输出分解成 [子任务+Worker] 列表
 3. 依次（或并行）把子任务派给对应 Worker
-   - Worker 收到 subtask + 必要的上下文
-   - Worker 用自己的 system prompt + tools 执行
-   - Worker 返回结果
-4. Supervisor 收集所有 Worker 的结果
-5. Supervisor（或专门的 Synthesizer）汇总成最终输出
+   - Worker 收到 subtask + 上下文，用 system prompt + tools 执行，返回结果
+4. Supervisor 收集所有 Worker 的结果，汇总成最终输出
 ```
 
 ### 2.5 Supervisor-Worker vs Plan-and-Execute
@@ -238,10 +230,10 @@ plan = AssignmentPlan.model_validate_json(response.choices[0].message.content)
 | 维度 | Plan-and-Execute（第08章） | Supervisor-Worker（本章） |
 |------|---------------------------|--------------------------|
 | **分解对象** | 步骤（step1, step2...） | 任务+执行者（worker+subtask） |
-| **执行者** | 同一个 Agent（自己执行所有步骤） | 不同 Agent（每个 Worker 角色不同） |
-| **角色多样性** | 单一角色（一个 Agent 全干） | 多角色（Researcher/Writer/Coder...） |
-| **system prompt** | 全程一个 system prompt | 每个 Worker 有独立的 system prompt |
-| **工具集** | 全程一个工具集 | 每个 Worker 有独立工具集 |
+| **执行者** | 同一个 Agent | 不同 Agent（每个 Worker 角色不同） |
+| **角色多样性** | 单一角色 | 多角色（Researcher/Writer/Coder...） |
+| **system prompt** | 全程一个 | 每个 Worker 独立 |
+| **工具集** | 全程一个 | 每个 Worker 独立 |
 
 一句话：**Plan-and-Execute 是"一个人分步干活"，Supervisor-Worker 是"一个团队分工干活"**。
 
@@ -256,10 +248,9 @@ Handoff 是另一种多 Agent 模式：一个 Agent 在处理任务时，发现"
 ```
 用户：我想退货
 客服 Agent：好的，请提供订单号...（处理退货流程）
-用户：退货页面报了 500 错误，代码是 ERR_DEPLOY_123
-客服 Agent：检测到"代码"/"错误"关键词 → 这是技术问题
-客服 Agent → Handoff → 技术 Agent（带上完整对话上下文）
-技术 Agent：我看到你遇到了 ERR_DEPLOY_123，这是部署问题，我帮你查...（继续处理）
+用户：退货页面报了 500 错误，代码 ERR_DEPLOY_123
+客服 Agent：检测到技术关键词 → Handoff → 技术 Agent（带上完整对话上下文）
+技术 Agent：我看到你遇到了 ERR_DEPLOY_123，这是部署问题，我帮你查...
 ```
 
 ### 3.2 Handoff vs Supervisor-Worker 的区别
@@ -267,10 +258,10 @@ Handoff 是另一种多 Agent 模式：一个 Agent 在处理任务时，发现"
 | 维度 | Supervisor-Worker | Handoff |
 |------|-------------------|---------|
 | **触发** | Supervisor 主动分派 | 当前 Agent 判断"超出范围"时被动触发 |
-| **控制流** | Supervisor 始终主导（派→收→汇总） | 控制权转移（A 全权交给 B） |
-| **上下文** | Supervisor 分派时传递 subtask | A 把完整对话历史交给 B |
+| **控制流** | Supervisor 始终主导 | 控制权转移（A 全权交给 B） |
+| **上下文** | 分派时传递 subtask | A 把完整对话历史交给 B |
 | **适合场景** | 任务可预先分解 | 任务进行中发现需要专家 |
-| **类比** | 项目经理分派任务给组员 | 客服把电话转给技术支持 |
+| **类比** | 项目经理分派任务 | 客服转接技术支持 |
 
 ### 3.3 Handoff 的触发机制
 
@@ -285,7 +276,6 @@ def needs_handoff(user_message: str) -> bool:
 ```
 
 更高级的做法是让客服 Agent 自己判断（用结构化输出）：
-
 ```python
 # 客服 Agent 输出：{"action": "answer" | "handoff_tech", "content": "..."}
 ```
@@ -308,9 +298,8 @@ customer_service_messages = [
 # Handoff：替换 system prompt，保留对话历史
 tech_messages = [
     {"role": "system", "content": TECH_EXPERT_PROMPT},  # 换角色
-    *customer_service_messages[1:],  # 保留 user/assistant 对话（去掉旧 system）
+    *customer_service_messages[1:],  # 保留 user/assistant 对话
 ]
-# 技术 Agent 继续处理
 ```
 
 > 💡 **为什么要替换 system prompt**：对话历史里的 user/assistant 消息是"事实记录"（发生了什么），但 system prompt 是"角色定义"（你是谁）。Handoff 后角色变了，必须换 system prompt，否则技术 Agent 还以为自己是客服。
@@ -344,18 +333,12 @@ Writer → Supervisor: {"result": "# AI Agent 调研报告\n..."}
 所有 Agent 读写同一个**共享数据结构**（"黑板"）。
 
 ```
-shared_context = {
-    "research_results": [],
-    "draft": "",
-    "critique": "",
-}
+shared_context = {"research_results": [], "draft": "", "critique": ""}
 
 # Researcher 写
 shared_context["research_results"].append("AI Agent 是...")
-
 # Writer 读 + 写
-draft = write(shared_context["research_results"])
-shared_context["draft"] = draft
+shared_context["draft"] = write(shared_context["research_results"])
 ```
 
 **优点**：Agent 不用关心"谁给的数据"，只管读写黑板。
@@ -375,7 +358,7 @@ shared_messages = [
 ```
 
 **优点**：上下文最完整，每个 Agent 都能看到全貌。
-**缺点**：**上下文爆炸**——所有 Agent 的输出都堆在一起，很快超窗口。
+**缺点**：所有 Agent 的输出堆在一起，很快超窗口。
 
 ### 4.4 本章的选择
 
@@ -415,7 +398,7 @@ class AssignmentPlan(BaseModel):
 
 ```python
 # 坏：Supervisor 随便发个字符串，Worker 要猜格式
-supervisor.send("Researcher 帮我查一下 AI Agent")  # Worker 不知道哪部分是任务
+supervisor.send("Researcher 帮我查一下 AI Agent")
 
 # 好：用结构化消息
 supervisor.send(Assignment(worker="Researcher", subtask="查 AI Agent 定义"))
@@ -438,10 +421,7 @@ final = supervisor.synthesize([result])
 # 为一个 1 次工具调用能解决的问题，引入了 3 次 LLM 调用（Supervisor分解 + Worker执行 + Supervisor汇总）
 ```
 
-**后果**：
-- **延迟 3 倍**：本来 1 秒能返回的，现在要 3 秒
-- **成本 3 倍**：3 次 API 调用 vs 1 次
-- **复杂度爆炸**：调试时要在 3 个 Agent 之间跳
+**后果**：延迟 3 倍、成本 3 倍、调试时要在 3 个 Agent 之间跳。
 
 **正确**：先用第04章的单 Agent 循环。只有当单 Agent 撑不住（工具过载/上下文过长/角色冲突）时，才上多 Agent。
 
@@ -454,7 +434,7 @@ result = worker.execute("查 AI Agent 定义")
 supervisor.synthesize([result])  # Supervisor 不知道哪个是错误、哪个是结果
 ```
 
-**后果**：Agent 之间的"误解"导致整个流程出错，且难以定位。
+**后果**：Agent 之间的"误解"导致流程出错，且难以定位。
 
 **正确**：用 Pydantic / Zod 定义清晰的消息结构，Worker 返回结构化结果（含 status 字段）。
 
@@ -474,7 +454,7 @@ with concurrent.futures.ThreadPoolExecutor() as ex:
     futures = [ex.submit(worker_task, w, s) for w, s in assignments]
 ```
 
-**后果**：Python 的 `list.append` 虽然有 GIL 保护，但更复杂的操作（read-modify-write）会丢更新。TS/JS 完全没保护，并发写必然出问题。
+**后果**：Python 有 GIL 保护 `list.append`，但更复杂的操作（read-modify-write）会丢更新。TS/JS 完全没保护，并发写必然出问题。
 
 **正确**：
 - 优先用**消息传递**（每个 Worker 返回独立结果，Supervisor 收集）
@@ -494,9 +474,9 @@ def supervisor(task):
             result = workers[assignment.worker].execute(assignment.subtask)
 ```
 
-**后果**：Supervisor 的角色模糊了——它既是调度者又是执行者，违背了"职责分离"的初衷。
+**后果**：Supervisor 既是调度者又是执行者，违背了"职责分离"。
 
-**正确**：Supervisor **只做调度**，所有执行都交给 Worker。如果某个子任务没有对应的 Worker，说明 Worker 团队设计不全，应该**增加 Worker** 而不是让 Supervisor 代劳。
+**正确**：Supervisor **只做调度**，所有执行都交给 Worker。没有对应的 Worker，说明团队设计不全，应该**增加 Worker** 而不是让 Supervisor 代劳。
 
 ### ❌ 反模式 5：Handoff 无限链（踢皮球）
 
@@ -532,36 +512,29 @@ editor = Worker(prompt="你是编辑，也能写文章")  # 跟 writer 重叠
 ### Supervisor-Worker（写调研报告）
 
 ```
-用户任务：调研 AI Agent 并写成报告
-
-Phase 1 (Supervisor 分解):
-  Supervisor → {"assignments": [
-    {"worker": "Researcher", "subtask": "检索 AI Agent 的定义"},
-    {"worker": "Researcher", "subtask": "检索 AI Agent 的应用场景"},
-    {"worker": "Writer", "subtask": "把检索结果写成报告"},
-  ]}
+Phase 1 (Supervisor 分解): Supervisor → {"assignments": [
+  {"worker": "Researcher", "subtask": "检索 AI Agent 的定义"},
+  {"worker": "Researcher", "subtask": "检索 AI Agent 的应用场景"},
+  {"worker": "Writer", "subtask": "把检索结果写成报告"},
+]}
 
 Phase 2 (Worker 执行):
   Researcher → search_wiki("AI Agent 定义") → "AI Agent 是..."
   Researcher → search_wiki("AI Agent 应用") → "应用于..."
   Writer → (综合研究结果写作) → "# AI Agent 调研报告\n..."
 
-Phase 3 (Supervisor 汇总):
-  Supervisor → 收集所有结果 → 最终输出
+Phase 3 (Supervisor 汇总): 收集所有结果 → 最终输出
 ```
 
 ### Handoff（客服 → 技术专家）
 
 ```
-Turn 1: 用户"我想退货"
-  客服 Agent → "好的，请提供订单号..."
+Turn 1: 用户"我想退货" → 客服 Agent → "好的，请提供订单号..."
 
 Turn 2: 用户"退货页面报 500，代码 ERR_DEPLOY_123"
-  客服 Agent → 检测到"代码"/"错误码"关键词
-  客服 Agent → Handoff（带上对话历史）→ 技术 Agent
+  客服 Agent → 检测到技术关键词 → Handoff（带上对话历史）→ 技术 Agent
 
 Turn 3: 技术 Agent（看到完整历史）→ "你遇到的是部署问题 ERR_DEPLOY_123，我来排查..."
-  技术 Agent → 返回技术解决方案
 ```
 
 ---
@@ -595,29 +568,28 @@ npx tsx typescript/main.ts
 
 代码会先用真实 API 尝试（占位符密钥会失败），然后**自动降级为离线 mock 演示**，100% 可靠地展示：
 
-1. **Supervisor-Worker**（`OUT:supervisor:` / `OUT:worker:{name}:`）：Supervisor 分派 → Researcher/Writer 执行 → Supervisor 汇总
+1. **Supervisor-Worker**（`OUT:supervisor:` / `OUT:worker:{name}:`）：Supervisor 分派 → Worker 执行 → Supervisor 汇总
 2. **Handoff**（`OUT:handoff:` / `OUT:resolve:`）：客服处理退货 → 检测技术关键词 → Handoff 给技术 Agent
 
 ---
 
 ## 兼容性注意
 
-- **`.env` 是占位符密钥**（`OPENAI_API_KEY=sk-REPLACE-ME`）→ 真实 API 调用会 401。
-  代码捕获错误并降级为离线 mock，依然展示完整的多 Agent 逻辑。
-- **本章不引入任何多 Agent 框架**（CrewAI/AutoGen/LangGraph）——每个 Worker 就是一次普通的 `chat.completions.create` 调用，让你看清底层。
+- **`.env` 是占位符密钥**（`OPENAI_API_KEY=sk-REPLACE-ME`）→ 真实 API 会 401，代码自动降级为离线 mock。
+- **本章不引入任何多 Agent 框架**——每个 Worker 就是一次普通的 `chat.completions.create` 调用，让你看清底层。
 - **离线 mock 设计**：预设分派决策序列（Supervisor-Worker）+ 预设客服→技术转交轨迹（Handoff），不依赖真实 API。
 
 ---
 
 ## 下一步
 
-本章你让「任务助手 Agent」进化成了**团队**——Supervisor 调度、Researcher/Writer/Coder 分工、还能 Handoff 给专家。
+本章你让「任务助手 Agent」进化成了**团队**——Supervisor 调度、Worker 分工、还能 Handoff 给专家。
 
-但你可能注意到一个问题：**每个 Agent 的上下文窗口是有限的**。随着任务变复杂、Agent 变多、对话变长，"怎么管好每个 Agent 的上下文预算"成了新挑战。
+但你可能注意到：**每个 Agent 的上下文窗口是有限的**。随着任务变复杂、Agent 变多，"怎么管好每个 Agent 的上下文预算"成了新挑战。
 
 第11章「上下文工程」会解决这个问题：如何压缩、分块、检索、遗忘——让多个 Agent 在有限的上下文窗口里高效协作。
 
-> 💡 **多 Agent 是手段，不是目的**。记住 Anthropic 的建议：从最简单的方案开始，多 Agent 只在单 Agent 明确"撑不住"时才用。一个设计良好的单 Agent，往往胜过一个设计糟糕的多 Agent 系统。
+> 💡 **多 Agent 是手段，不是目的**。从最简单的方案开始，多 Agent 只在单 Agent 明确"撑不住"时才用。一个设计良好的单 Agent，往往胜过一个设计糟糕的多 Agent 系统。
 
 ---
 
