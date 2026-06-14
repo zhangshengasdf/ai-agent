@@ -5,6 +5,12 @@
 > 学完本章，你打开 LangChain、OpenAI Agents SDK、Pydantic AI、Mastra、Vercel AI SDK 的源码，
 > 会发现它们底层都在做同一件事：把这 6 块拼起来。
 
+## TL;DR
+
+> **30 秒速读**：所有 Agent 框架的底层都是 6 个组件——AgentRunner（循环引擎）、ToolRegistry（工具注册表）、LLMClient（模型包装器）、Memory（记忆管理）、ActionParser（输出解析）、Observer（可观测钩子），本章只定义接口不写实现。
+> 
+> **如果只记一件事**：接口先行（Contract-First Design）——先用 Protocol/interface 定义组件契约，再并行实现，这是框架可替换、可测试、可协作的基础。
+
 ---
 
 ## 本章目标
@@ -492,6 +498,17 @@ class GoodObserver(Observer):
 
 **原则**：**Observer 是纯旁路**。只读不写，只记录不决策。如果需要干预主流程（如护栏），
 那是第16章 `GuardrailObserver` 的职责，而且要通过显式的"中断信号"机制，不是偷偷改状态。
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。这些是初学者最常犯的错误。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| Protocol/interface 定义了但实现类没遵守 | 运行时方法签名不匹配，调用时参数错误或返回类型不对 | Python 用 `@runtime_checkable` + `isinstance()` 检查；TS 用 `implements` 编译期检查 |
+| AgentRunner 构造函数写死了具体实现 | 想换 MockLLMClient 做测试时发现改不了，得改 AgentRunner 源码 | 构造函数接收接口类型（`llm: LLMClient`），通过依赖注入传入 |
+| Observer 的钩子方法里调了 LLM 或改了 Memory | 主流程状态被"隐藏"修改，调试时找不到是谁改的 | Observer 只做日志/trace，不修改任何状态；需要干预时用显式信号机制 |
+| 只定义了 2 个组件就急着写框架 | 接口设计脱离实际，后面发现"这个方法应该在另一个组件里" | 先写 3-5 个具体 Agent（第04-11章），发现重复模式后再抽象（Rule of Three） |
 
 ---
 

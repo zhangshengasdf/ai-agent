@@ -5,6 +5,12 @@
 > 这是经典论文 *ReAct: Synergizing Reasoning and Acting in Language Models*（Yao et al., 2022）提出的核心范式，
 > 几乎所有现代 Agent 框架的"推理轨迹"都源于此。
 
+## TL;DR
+
+> **30 秒速读**：ReAct 让模型在每一步行动前先写出思考过程（Thought → Action → Observation），分"显式"（文本解析）和"隐式"（tools API）两种实现方式。
+> 
+> **如果只记一件事**：显式 ReAct 用正则解析 Thought/Action 文本，可调试但脆弱；隐式 ReAct 用 tools API 的结构化 tool_calls，稳定但推理过程是黑盒。生产用隐式，教学/调试用显式。
+
 ---
 
 ## 本章目标
@@ -344,6 +350,17 @@ result = execute_tool(match)
 **后果**：模型永远看不到工具结果，陷入无限重复调用。
 
 **正确**：每一步的 Observation **必须**追加到 prompt，让模型在下一轮"看到"结果。这正是 ReAct 循环的核心。
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。这些是初学者最常犯的错误。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| 正则写错，漏了 `re.DOTALL` | Thought 里有换行时只匹配到第一行，后面截断 | 加 `re.DOTALL` 标志，或用 `[\s\S]*?` 替代 `.*?` |
+| 模型输出中文标点 `：` 而非英文 `:` | 正则 `r'Thought:\s*'` 匹配不到，整轮解析失败 | Prompt 里明确写"必须用英文冒号"，或正则同时匹配 `[：:]` |
+| 没处理 `Final Answer` 的提取 | 模型给了答案但代码还在等 Action，循环空转到 max_steps | 先检测 `"Final Answer:" in text`，再走 Action 解析分支 |
+| `max_tokens` 设太小 | Thought 被截断，Action 行没生成，解析失败 | 单步至少给 300-500 tokens，让模型有空间写完 Thought + Action |
 
 ---
 

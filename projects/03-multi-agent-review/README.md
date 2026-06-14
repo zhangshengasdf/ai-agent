@@ -4,6 +4,14 @@
 
 ---
 
+## TL;DR
+
+> **30 秒速读**：Supervisor-Worker 架构的多 Agent 代码审查系统，3 个专业 Reviewer 分别从安全、性能、风格维度审查代码，Supervisor 汇总后按严重程度排序输出报告。
+> 
+> **如果只记一件事**：多 Agent 协作的关键是"专业分工 + 结构化汇总"，每个 Agent 只管自己擅长的维度。
+
+---
+
 ## 你会学到什么
 
 1. **Supervisor-Worker 架构**：一个协调者分派任务给多个专业 Agent，收集结果后汇总
@@ -45,6 +53,20 @@
 | **Security** | 安全审查 | SQL 注入 (`execute.*%s`)、硬编码密码、XSS |
 | **Performance** | 性能审查 | O(n²) 嵌套循环 (`for...for`)、不必要拷贝、线性查找 |
 | **Style** | 风格审查 | 模糊命名 (`temp`/`data`)、缺少类型注解、缺少 docstring |
+
+---
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| 3 个 Reviewer 同时跑但没收集结果 | Supervisor 拿到空报告，输出"无问题" | 用 `asyncio.gather()` 或顺序执行，确保所有结果收集完再汇总 |
+| LLM 审查失败时没有 fallback | API 超时后整个审查流程卡住 | 每个 Reviewer 都有正则规则 fallback，LLM 失败自动降级 |
+| 汇总报告没按严重程度排序 | Critical 和 Info 混在一起，用户看不到重点 | 排序 key = `(severity_order, line_number)`，Critical=0, Warning=1, Info=2 |
+| 正则规则写得太宽泛 | 把正常的 `for` 循环也报成 O(n²) | 嵌套循环检测要确认两层 `for` 是父子关系，不是同级 |
+| 没处理 Reviewer 返回空结果 | 汇总时 `None` 导致 TypeError | 每个 Reviewer 返回列表，空列表 `[]` 也是合法结果 |
 
 ---
 

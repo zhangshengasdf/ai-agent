@@ -7,6 +7,14 @@
 
 ---
 
+## TL;DR
+
+> **30 秒速读**：给 Agent 装上"飞行记录仪"——用 TraceCollector 记录每一步 LLM 调用和工具调用的树状链路，用 CostTracker 按 token × 单价算清每次查询花了多少钱，用 ASCII 树在终端可视化。
+> 
+> **如果只记一件事**：没有 trace 的 Agent 不该上生产，因为你无法回答"它为什么这么做"。
+
+---
+
 ## 本章目标
 
 学完本章，你将能够：
@@ -537,6 +545,20 @@ trace.add_span("tool_result", ...)       # tool_call 的子
 
 **原则**：**四级粒度足够**（step → llm_call → tool_call → tool_result）。这是 OpenTelemetry
 和 LangSmith 的事实标准粒度，不要自创更细的。
+
+---
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| trace 只存内存不落盘 | 进程重启后历史 trace 全丢，出 bug 无法回放 | 每次请求结束后 `to_json_file()` 写磁盘，生产上传平台 |
+| 不记录 `usage` 里的 token 数 | 月底账单爆炸，不知道哪个请求烧的钱 | 每次 LLM 调用后立刻 `tracker.add_llm_call(prompt_tokens, completion_tokens)` |
+| Observer 里改了 Memory 或 messages | Agent 行为莫名异常，trace 系统自己成了 bug 来源 | Observer 只读不写，需要干预时返回中断信号让主流程决策 |
+| print 自由文本当日志 | 运营想统计平均工具耗时，得写正则从字符串里抠数字 | 用 `json.dumps()` 输出结构化日志，字段名固定 |
+| trace 粒度太细（每个 JSON.parse 都记） | trace 树 20 层深，信号被噪声淹没 | 只记 step / llm_call / tool_call / tool_result 四级 |
 
 ---
 

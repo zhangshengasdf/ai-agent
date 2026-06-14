@@ -4,6 +4,12 @@
 > 我们会用原生字符串模板（f-string / 模板字符串）手写 4 种核心 Prompt 技术，
 > 不依赖任何第三方抽象库。
 
+## TL;DR
+
+> **30 秒速读**：Prompt 工程的四种核心技术是 System Prompt（定身份）、Few-shot（给示例教模式）、Chain-of-Thought（引导逐步推理）、结构化输出（强制 JSON），它们是所有 Agent 指令设计的基础。
+> 
+> **如果只记一件事**：system prompt 的优先级高于 user message，把关键规则放在 system 里才能防止用户输入覆盖你的指令。
+
 ---
 
 ## 为什么 Prompt 工程是 Agent 的地基
@@ -265,6 +271,17 @@ messages = [
 ```
 
 **修正**：所有示例用完全相同的格式。
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。这些是初学者最常犯的错误。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| JSON 输出带 markdown 包裹 | `json.loads()` 报 `JSONDecodeError`，因为模型返回了 ` ```json ... ``` ` | 在 system prompt 中明确写"只输出纯 JSON，不要 markdown 代码块"，或用正则提取 |
+| Few-shot 示例数量太多 | token 消耗暴涨，响应变慢 | 2-3 个示例足够，覆盖边界情况即可，不需要穷举 |
+| CoT 用在不需要的场景 | 简单分类任务输出一大段推理过程，浪费 token | 简单任务直接要答案，只在数学、逻辑、多步推理时用 CoT |
+| `response_format` 不兼容 | 某些模型返回 400 或忽略该参数 | 优先用 `{"type": "json_object"}`（最通用），不支持的模型改用 prompt 约束 |
 
 ---
 

@@ -8,6 +8,14 @@
 
 ---
 
+## TL;DR
+
+> **30 秒速读**：给第13章的 mini 框架装上流式输出、结构化输出强制、工具参数校验三个生产级特性，然后对比 OpenAI Agents SDK / Pydantic AI / Vercel AI SDK 如何用一行代码搞定你 50 行的逻辑。
+> 
+> **如果只记一件事**：校验失败时把错误信息反馈给 LLM 让它自我修正，比直接抛异常给用户强 100 倍。
+
+---
+
 ## 本章目标
 
 学完本章，你将能够：
@@ -506,6 +514,20 @@ for chunk in stream:
 
 不学原理直接用 LangChain / OpenAI Agents SDK，出 bug 完全不知道哪里错。
 **正确做法**：先学原理（本教程第01-14章），再用框架——你能调得很深。
+
+---
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| 流式输出攒完再 `print` | 用户等了 5 秒才看到一大段文字，和没流式一样 | 每个 chunk 立刻 `print(delta, end="", flush=True)` |
+| `response_format` 只设了 `json_object` 没做 Pydantic 校验 | LLM 返回合法 JSON 但缺字段，下游 `KeyError` 崩溃 | `json_object` + `model_validate_json` 双保险 |
+| 校验失败直接 `raise ValueError` | Agent 循环直接崩掉，用户看到 500 错误 | 返回错误消息字符串，让 Agent 下一轮自我修正 |
+| Python 校验 integer 没排除 bool | `{"priority": True}` 通过校验，下游做算术崩溃 | `isinstance(value, bool)` 放在 `isinstance(value, int)` 之前检查 |
+| 手写框架加了太多功能不肯放手 | 造出简陋版 LangChain，没有社区、没有文档 | 学完原理切到现代框架，自造只用于学习和极简场景 |
 
 ---
 

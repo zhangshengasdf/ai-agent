@@ -8,6 +8,14 @@
 
 ---
 
+## TL;DR
+
+> **30 秒速读**：把第12章的 6 个接口 Protocol/interface 逐一写成可运行的实现类，用依赖注入组装成一个完整的 mini Agent 框架，跑通"查天气 + 算温差"的多步循环。
+> 
+> **如果只记一件事**：依赖注入（构造函数接收接口类型）是所有现代框架的核心，掌握它就能在一小时内读懂任何框架源码。
+
+---
+
 ## 本章目标
 
 学完本章，你将能够：
@@ -450,6 +458,20 @@ result = eval(expression)  # ❌ expression 可能是 "__import__('os').system('
 tree = ast.parse(expression, mode="eval")
 # 只允许 BinOp + 数字 + 安全运算符
 ```
+
+---
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| 注入时传了具体类而不是接口 | 换实现时发现改一处崩一片，测试无法 mock | 构造函数参数类型写 Protocol/interface，不写 `DefaultLLMClient` |
+| Observer 里偷偷改了 Memory | Agent 行为莫名异常，trace 和日志对不上 | Observer 只做 `print` / `add_entry`，需要干预时返回中断信号 |
+| mock 序列步数不够 | Agent 循环跑到第 5 步时 mock 用完了，抛 IndexError | mock 序列长度 ≥ `max_steps`，或用 `itertools.cycle` 循环 |
+| TypeScript 忘了 `for await` | 流式 chunk 拿到的是 Promise 对象而不是字符串 | SDK 的 stream 只有异步迭代器，必须 `for await...of` |
+| 工具 handler 参数类型不匹配 | TS 里 `args` 是 `Record<string, unknown>`，直接展开报错 | 用 `Object.values(args).map(String)` 转成位置参数数组 |
 
 ---
 

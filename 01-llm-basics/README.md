@@ -3,6 +3,12 @@
 > **目标**：理解 LLM API 的核心概念，能用 Python/TypeScript 发出第一个请求并读懂返回值。
 > 这是整个教程的地基——后续 16 章的 Agent 循环、工具调用、记忆系统全都建立在此之上。
 
+## TL;DR
+
+> **30 秒速读**：LLM API 就是一个 HTTP 接口，你发 messages 数组，它返回补全文本，每次调用完全独立，模型不会记住任何历史。
+> 
+> **如果只记一件事**：messages 数组里的 role（system/user/assistant）决定了"谁在说话"，system prompt 是你控制模型行为的最强杠杆。
+
 ---
 
 ## 1. LLM API 是什么？
@@ -216,6 +222,17 @@ API **边生成边返回**，每生成几个 token 就发一个 chunk。
 
 **真相**：即使 temperature=0，模型在底层浮点运算中仍有微小随机性（取决于硬件/实现）。
 但实际差异极小，可以认为是"确定性"的。
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。这些是初学者最常犯的错误。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| 忘记传 API Key | `AuthenticationError: Invalid API key` 或 HTTP 401 | 检查 `.env` 文件中 `OPENAI_API_KEY` 是否填写，确认没有多余空格 |
+| 上下文窗口超限 | `context_length_exceeded` HTTP 400 错误 | 检查 messages 总 token 数，用响应中的 `usage` 字段监控，必要时截断历史 |
+| temperature 设错场景 | 分类任务每次结果不同，或创意写作千篇一律 | 代码生成/分类用 `0.0`，创意任务用 `0.7` 到 `1.0` |
+| 流式响应没处理 [DONE] | 程序卡住不退出，或拼接出乱码 | 检查 chunk 是否为 `[DONE]` 再停止循环，拼接时用 `chunk.choices[0].delta.content` |
 
 ---
 

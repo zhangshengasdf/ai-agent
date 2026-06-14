@@ -4,6 +4,12 @@
 > 进化为"先规划全局、再分步执行、执行完还要反思改进"。
 > 这是让 Agent 能处理复杂、多阶段任务的关键能力。
 
+## TL;DR
+
+> **30 秒速读**：Plan-and-Execute 让 Agent 先把任务分解成步骤列表（用 `response_format=json_object` 强制结构化输出），再逐步执行，最后汇总结果；Reflection 让 Agent 审视自己的输出并改进。
+> 
+> **如果只记一件事**：用 `response_format={"type": "json_object"}` + Pydantic 校验，让模型输出结构化的步骤列表，这是规划模式的技术基础。
+
 ---
 
 ## 本章目标
@@ -432,6 +438,17 @@ while not is_perfect(draft):
 **后果**：延迟无限增长，成本爆炸，边际收益趋零。
 
 **正确**：**固定反思轮数**（通常 1 轮足够，最多 2 轮）。第 2 轮后的改进通常不值得额外成本。
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。这些是初学者最常犯的错误。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| `response_format` 忘了设 `json_object` | 模型输出自由文本 `"1. 查定义\n2. 查应用"`，`json.loads()` 报错 `JSONDecodeError` | 必须传 `response_format={"type": "json_object"}`，并用 Pydantic 校验 |
+| 计划步骤写了"研究一下"这种模糊描述 | Worker 拿到后不知道具体干什么，输出质量差 | 在 PLAN_SYSTEM_PROMPT 里约束"每步必须具体、可执行"，并给 Few-shot 示例 |
+| 反思 prompt 没给批评维度 | 模型回复"总体不错，可以更详细"，改进版和初版几乎一样 | 列出具体维度（完整性/准确性/结构），强制模型聚焦 |
+| Reflection 跑了 5 轮还没停 | 延迟 5 倍，成本 5 倍，改进微乎其微 | 固定 1-2 轮，用 `for _ in range(2)` 而非 `while True` |
 
 ---
 

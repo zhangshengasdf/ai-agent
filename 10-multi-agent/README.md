@@ -4,6 +4,12 @@
 > 而是让多个专门化的 Agent 分工协作：一个当 Supervisor（调度）、几个当 Worker（干活），
 > 遇到超出自己能力范围的问题还能 Handoff（转交）给更专业的同事。
 
+## TL;DR
+
+> **30 秒速读**：多 Agent 用 Supervisor-Worker 模式分工协作（Supervisor 分派任务、Worker 执行）和 Handoff 模式转交对话（客服 → 技术专家），但最大的陷阱是"用早了"——大多数任务单 Agent 就能搞定。
+> 
+> **如果只记一件事**：先问"单个 Agent 为什么搞不定？"，能明确回答（工具过载 / 上下文过长 / 角色冲突 / 需要并行）才上多 Agent，否则回去优化单 Agent。
+
 ---
 
 ## 本章目标
@@ -504,6 +510,17 @@ editor = Worker(prompt="你是编辑，也能写文章")  # 跟 writer 重叠
 **后果**：Supervisor 的分派决策不稳定（两个都能干的活，每次可能派给不同人），结果不可预测。
 
 **正确**：每个 Worker 的 system prompt 要**边界清晰、互斥**。Researcher 只检索、Writer 只写作、Coder 只写码——没有重叠。
+
+## 常见错误
+
+> 概念懂了，实际写代码还是会踩坑。这些是初学者最常犯的错误。
+
+| 错误 | 症状 | 解决 |
+|------|------|------|
+| Supervisor 的 JSON 输出没做 Pydantic 校验 | 模型偶尔输出 `{"assignments": "Researcher"}` 而非列表，后续 `for` 循环报 `TypeError` | 用 `AssignmentPlan.model_validate_json()` 校验，校验失败就重试或降级 |
+| Handoff 后没替换 system prompt | 技术 Agent 还以为自己是客服，回答风格和能力都不对 | Handoff 时保留 user/assistant 历史，但**替换** system prompt 为新角色 |
+| Worker 返回空字符串 | Supervisor 收到 `""`，不知道是成功还是失败，汇总时丢信息 | Worker 返回结构化结果 `{status: "ok", result: "..."}` 或 `{status: "error", message: "..."}` |
+| 两个 Worker 的 system prompt 职责重叠 | Supervisor 分派不稳定，同一任务每次可能派给不同人，结果不可预测 | 每个 Worker 的 prompt 边界清晰互斥，用"你只负责X，不负责Y"明确排除 |
 
 ---
 
