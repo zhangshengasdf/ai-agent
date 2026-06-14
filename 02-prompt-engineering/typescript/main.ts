@@ -29,6 +29,21 @@ const TaskSchema = z.object({
 
 type TaskInfo = z.infer<typeof TaskSchema>;
 
+// ── 离线 mock 数据 ─────────────────────────────────────────────────
+const MOCK_NO_SYS = "建议你先列出会议议程，准备相关材料，然后预留时间写报告。";
+const MOCK_WITH_SYS =
+  '{"title": "准备明天会议", "priority": "high", "description": "明天要开会，需要提前准备议程和材料"}';
+const MOCK_FEW_SHOT = ["正面", "负面", "中性"];
+const MOCK_COT_DIRECT = "C（今天下午截止）→ A（明天截止）→ B（下周截止）";
+const MOCK_COT_REASONING =
+  "让我逐一分析：\n" +
+  "1. 任务 C：截止今天下午，预计 4 小时。今天有 4 小时可用，刚好够完成，必须第一个做。\n" +
+  "2. 任务 A：截止明天，预计 2 小时。今天时间已被 C 占满，但明天还有时间，优先级第二。\n" +
+  "3. 任务 B：截止下周，预计 30 分钟。时间最充裕，可以最后做。\n\n" +
+  "排序：C → A → B";
+const MOCK_STRUCTURED_JSON =
+  '{"title": "提交项目报告", "priority": "medium", "description": "下周三之前完成，需要整理数据和写总结"}';
+
 // ═══════════════════════════════════════════════════════════════════
 // 场景 1：无 System Prompt vs 有 System Prompt
 // ═══════════════════════════════════════════════════════════════════
@@ -39,11 +54,17 @@ async function demoSystemPrompt(): Promise<void> {
   console.log(`\n${SEPARATOR}`);
   console.log("场景 1：无 System Prompt");
   console.log(SEPARATOR);
-  const respNoSys = await client.chat.completions.create({
-    model: cfg.model,
-    messages: [{ role: "user", content: userInput }],
-  });
-  const answerNoSys = respNoSys.choices[0].message.content ?? "";
+  let answerNoSys: string;
+  try {
+    const respNoSys = await client.chat.completions.create({
+      model: cfg.model,
+      messages: [{ role: "user", content: userInput }],
+    });
+    answerNoSys = respNoSys.choices[0].message.content ?? "";
+  } catch {
+    console.log("OUT: [提示] API 不可用，使用离线 mock 演示");
+    answerNoSys = MOCK_NO_SYS;
+  }
   console.log(`OUT: ${answerNoSys.slice(0, 200)}`);
 
   // ── 1b. 有 system prompt（任务助手人格）────────────────────────
@@ -55,15 +76,21 @@ async function demoSystemPrompt(): Promise<void> {
     '返回 JSON 格式：{"title": "任务标题", "priority": "high|medium|low", "description": "任务描述"}。' +
     "优先级规则：紧急=high，重要=medium，其他=low。只返回 JSON，不要其他文字。";
 
-  const respWithSys = await client.chat.completions.create({
-    model: cfg.model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userInput },
-    ],
-    response_format: { type: "json_object" },
-  });
-  const answerWithSys = respWithSys.choices[0].message.content ?? "";
+  let answerWithSys: string;
+  try {
+    const respWithSys = await client.chat.completions.create({
+      model: cfg.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userInput },
+      ],
+      response_format: { type: "json_object" },
+    });
+    answerWithSys = respWithSys.choices[0].message.content ?? "";
+  } catch {
+    console.log("OUT: [提示] API 不可用，使用离线 mock 演示");
+    answerWithSys = MOCK_WITH_SYS;
+  }
   console.log(`OUT: ${answerWithSys}`);
 }
 
@@ -99,13 +126,24 @@ async function demoFewShot(): Promise<void> {
     "商品重量约 500 克，保质期 12 个月。",
   ];
 
-  for (const inp of testInputs) {
+  let apiFailed = false;
+  for (let i = 0; i < testInputs.length; i++) {
+    const inp = testInputs[i];
     const prompt = fewShotTemplate.replace("{user_input}", inp);
-    const resp = await client.chat.completions.create({
-      model: cfg.model,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const label = (resp.choices[0].message.content ?? "").trim();
+    let label: string;
+    try {
+      const resp = await client.chat.completions.create({
+        model: cfg.model,
+        messages: [{ role: "user", content: prompt }],
+      });
+      label = (resp.choices[0].message.content ?? "").trim();
+    } catch {
+      if (!apiFailed) {
+        console.log("OUT: [提示] API 不可用，使用离线 mock 演示");
+        apiFailed = true;
+      }
+      label = MOCK_FEW_SHOT[i];
+    }
     console.log(`OUT: 输入：${inp}`);
     console.log(`OUT: 分类：${label}`);
     console.log();
@@ -128,26 +166,40 @@ async function demoChainOfThought(): Promise<void> {
 
   // ── 直接回答 ───────────────────────────────────────────────────
   console.log("\n--- 直接回答（不引导 CoT）---");
-  const respDirect = await client.chat.completions.create({
-    model: cfg.model,
-    messages: [{ role: "user", content: question + "\n请直接给出排序结果。" }],
-  });
-  console.log(`OUT: ${(respDirect.choices[0].message.content ?? "").slice(0, 300)}`);
+  let directAnswer: string;
+  try {
+    const respDirect = await client.chat.completions.create({
+      model: cfg.model,
+      messages: [{ role: "user", content: question + "\n请直接给出排序结果。" }],
+    });
+    directAnswer = (respDirect.choices[0].message.content ?? "").slice(0, 300);
+  } catch {
+    console.log("OUT: [提示] API 不可用，使用离线 mock 演示");
+    directAnswer = MOCK_COT_DIRECT;
+  }
+  console.log(`OUT: ${directAnswer}`);
 
   // ── CoT 引导 ───────────────────────────────────────────────────
   console.log("\n--- CoT 引导（请一步一步思考）---");
-  const respCot = await client.chat.completions.create({
-    model: cfg.model,
-    messages: [
-      {
-        role: "user",
-        content:
-          question +
-          "\n请一步一步思考，分析每个任务的紧急程度和所需时间，然后给出排序。",
-      },
-    ],
-  });
-  console.log(`OUT: ${(respCot.choices[0].message.content ?? "").slice(0, 500)}`);
+  let cotAnswer: string;
+  try {
+    const respCot = await client.chat.completions.create({
+      model: cfg.model,
+      messages: [
+        {
+          role: "user",
+          content:
+            question +
+            "\n请一步一步思考，分析每个任务的紧急程度和所需时间，然后给出排序。",
+        },
+      ],
+    });
+    cotAnswer = (respCot.choices[0].message.content ?? "").slice(0, 500);
+  } catch {
+    console.log("OUT: [提示] API 不可用，使用离线 mock 演示");
+    cotAnswer = MOCK_COT_REASONING;
+  }
+  console.log(`OUT: ${cotAnswer}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -166,16 +218,22 @@ async function demoStructuredOutput(): Promise<void> {
 
   const userInput = "下周三之前要提交项目报告，需要整理数据和写总结";
 
-  const resp = await client.chat.completions.create({
-    model: cfg.model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userInput },
-    ],
-    response_format: { type: "json_object" },
-  });
+  let rawJson: string;
+  try {
+    const resp = await client.chat.completions.create({
+      model: cfg.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userInput },
+      ],
+      response_format: { type: "json_object" },
+    });
+    rawJson = resp.choices[0].message.content ?? "{}";
+  } catch {
+    console.log("OUT: [提示] API 不可用，使用离线 mock 演示");
+    rawJson = MOCK_STRUCTURED_JSON;
+  }
 
-  const rawJson = resp.choices[0].message.content ?? "{}";
   console.log(`OUT: 原始 JSON：${rawJson}`);
 
   // Zod 解析 + 校验

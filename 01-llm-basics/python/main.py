@@ -10,6 +10,7 @@
 """
 
 import sys
+import time
 from pathlib import Path
 
 # ── 让章节代码能 import shared.config ──────────────────────────────
@@ -32,6 +33,19 @@ SYSTEM_PROMPT = (
 
 USER_MESSAGE = "我今天有三个会要开，还有一个报告要写，怎么安排优先级？"
 
+# ── 离线 mock 数据 ──────────────────────────────────────────────────
+_MOCK_SINGLE_TURN = (
+    "建议按以下优先级安排：\n"
+    "1. 报告（截止最紧，先完成）\n"
+    "2. 最重要的会议（上午集中精力处理）\n"
+    "3. 其余两个会穿插在间隙中\n"
+    "每件事设定时间上限，避免拖堂。"
+)
+_MOCK_TOKEN_USAGE = {"prompt_tokens": 42, "completion_tokens": 68, "total_tokens": 110}
+_MOCK_TEMP_0 = "Agent 是一个能感知环境、自主决策并执行任务的智能程序。"
+_MOCK_TEMP_1 = "Agent 就像一个有自主意识的小助手，它能观察周围环境，自己决定下一步该做什么，然后去执行。"
+_MOCK_STREAM_CHUNKS = ["流", "式", "输出", "的好处", "是：", "用户", "可以", "立即", "看到", "部分", "结果，", "体验", "更", "流畅。"]
+
 
 # ═══════════════════════════════════════════════════════════════════
 # Demo 1: 单轮对话
@@ -42,15 +56,21 @@ def demo_single_turn() -> None:
     print("OUT: [Demo 1] 单轮对话 —— 任务助手 Agent")
     print("=" * 60)
 
-    response = client.chat.completions.create(
-        model=cfg.model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_MESSAGE},
-        ],
-    )
+    try:
+        response = client.chat.completions.create(
+            model=cfg.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": USER_MESSAGE},
+            ],
+        )
+        answer = response.choices[0].message.content
+        usage = response.usage
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示")
+        answer = _MOCK_SINGLE_TURN
+        usage = None
 
-    answer = response.choices[0].message.content
     print(f"OUT: \n[用户] {USER_MESSAGE}")
     print(f"OUT: \n[任务助手] {answer}")
 
@@ -58,10 +78,14 @@ def demo_single_turn() -> None:
     print("\n" + "=" * 60)
     print("OUT: [Demo 2] Token 用量")
     print("=" * 60)
-    usage = response.usage
-    print(f"OUT: prompt_tokens     = {usage.prompt_tokens}")
-    print(f"OUT: completion_tokens = {usage.completion_tokens}")
-    print(f"OUT: total_tokens      = {usage.total_tokens}")
+    if usage is not None:
+        print(f"OUT: prompt_tokens     = {usage.prompt_tokens}")
+        print(f"OUT: completion_tokens = {usage.completion_tokens}")
+        print(f"OUT: total_tokens      = {usage.total_tokens}")
+    else:
+        print(f"OUT: prompt_tokens     = {_MOCK_TOKEN_USAGE['prompt_tokens']}")
+        print(f"OUT: completion_tokens = {_MOCK_TOKEN_USAGE['completion_tokens']}")
+        print(f"OUT: total_tokens      = {_MOCK_TOKEN_USAGE['total_tokens']}")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -74,17 +98,23 @@ def demo_temperature_comparison() -> None:
     print("=" * 60)
 
     question = "用一句话解释什么是 Agent。"
+    mock_answers = {0.0: _MOCK_TEMP_0, 1.0: _MOCK_TEMP_1}
 
     for temp in [0.0, 1.0]:
-        response = client.chat.completions.create(
-            model=cfg.model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": question},
-            ],
-            temperature=temp,
-        )
-        answer = response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(
+                model=cfg.model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": question},
+                ],
+                temperature=temp,
+            )
+            answer = response.choices[0].message.content
+        except Exception:
+            print("OUT: [提示] API 不可用，使用离线 mock 演示")
+            answer = mock_answers[temp]
+
         print(f"OUT: \n[temperature={temp}] {answer}")
 
 
@@ -98,19 +128,26 @@ def demo_streaming() -> None:
     print("=" * 60)
     print("OUT: \n[任务助手] ", end="", flush=True)
 
-    stream = client.chat.completions.create(
-        model=cfg.model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": "流式输出的好处是什么？用两句话回答。"},
-        ],
-        stream=True,
-    )
+    try:
+        stream = client.chat.completions.create(
+            model=cfg.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": "流式输出的好处是什么？用两句话回答。"},
+            ],
+            stream=True,
+        )
 
-    for chunk in stream:
-        delta = chunk.choices[0].delta
-        if delta.content:
-            print(delta.content, end="", flush=True)
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                print(delta.content, end="", flush=True)
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示", flush=True)
+        print("OUT: \n[任务助手] ", end="", flush=True)
+        for token in _MOCK_STREAM_CHUNKS:
+            print(token, end="", flush=True)
+            time.sleep(0.05)
 
     print()  # 换行
 

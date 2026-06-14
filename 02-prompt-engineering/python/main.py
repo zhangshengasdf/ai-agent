@@ -9,7 +9,6 @@
 运行：python3 02-prompt-engineering/python/main.py
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -37,6 +36,21 @@ class TaskInfo(BaseModel):
     description: str
 
 
+# ── 离线 mock 数据 ─────────────────────────────────────────────────
+_MOCK_NO_SYS = "建议你先列出会议议程，准备相关材料，然后预留时间写报告。"
+_MOCK_WITH_SYS = '{"title": "准备明天会议", "priority": "high", "description": "明天要开会，需要提前准备议程和材料"}'
+_MOCK_FEW_SHOT = ["正面", "负面", "中性"]
+_MOCK_COT_DIRECT = "C（今天下午截止）→ A（明天截止）→ B（下周截止）"
+_MOCK_COT_REASONING = (
+    "让我逐一分析：\n"
+    "1. 任务 C：截止今天下午，预计 4 小时。今天有 4 小时可用，刚好够完成，必须第一个做。\n"
+    "2. 任务 A：截止明天，预计 2 小时。今天时间已被 C 占满，但明天还有时间，优先级第二。\n"
+    "3. 任务 B：截止下周，预计 30 分钟。时间最充裕，可以最后做。\n\n"
+    "排序：C → A → B"
+)
+_MOCK_STRUCTURED_JSON = '{"title": "提交项目报告", "priority": "medium", "description": "下周三之前完成，需要整理数据和写总结"}'
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 场景 1：无 System Prompt vs 有 System Prompt
 # ═══════════════════════════════════════════════════════════════════
@@ -48,11 +62,15 @@ def demo_system_prompt() -> None:
     print(f"\n{SEPARATOR}")
     print("场景 1：无 System Prompt")
     print(SEPARATOR)
-    resp_no_sys = client.chat.completions.create(
-        model=cfg.model,
-        messages=[{"role": "user", "content": user_input}],
-    )
-    answer_no_sys = resp_no_sys.choices[0].message.content or ""
+    try:
+        resp_no_sys = client.chat.completions.create(
+            model=cfg.model,
+            messages=[{"role": "user", "content": user_input}],
+        )
+        answer_no_sys = resp_no_sys.choices[0].message.content or ""
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示")
+        answer_no_sys = _MOCK_NO_SYS
     print(f"OUT: {answer_no_sys[:200]}")
 
     # ── 1b. 有 system prompt（任务助手人格）────────────────────────
@@ -65,15 +83,19 @@ def demo_system_prompt() -> None:
         "\"priority\": \"high|medium|low\", \"description\": \"任务描述\"}。"
         "优先级规则：紧急=high，重要=medium，其他=low。只返回 JSON，不要其他文字。"
     )
-    resp_with_sys = client.chat.completions.create(
-        model=cfg.model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input},
-        ],
-        response_format={"type": "json_object"},
-    )
-    answer_with_sys = resp_with_sys.choices[0].message.content or ""
+    try:
+        resp_with_sys = client.chat.completions.create(
+            model=cfg.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
+            response_format={"type": "json_object"},
+        )
+        answer_with_sys = resp_with_sys.choices[0].message.content or ""
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示")
+        answer_with_sys = _MOCK_WITH_SYS
     print(f"OUT: {answer_with_sys}")
 
 
@@ -108,13 +130,20 @@ def demo_few_shot() -> None:
         "商品重量约 500 克，保质期 12 个月。",
     ]
 
-    for inp in test_inputs:
+    api_failed = False
+    for i, inp in enumerate(test_inputs):
         prompt = few_shot_prompt.format(user_input=inp)
-        resp = client.chat.completions.create(
-            model=cfg.model,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        label = (resp.choices[0].message.content or "").strip()
+        try:
+            resp = client.chat.completions.create(
+                model=cfg.model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            label = (resp.choices[0].message.content or "").strip()
+        except Exception:
+            if not api_failed:
+                print("OUT: [提示] API 不可用，使用离线 mock 演示")
+                api_failed = True
+            label = _MOCK_FEW_SHOT[i]
         print(f"OUT: 输入：{inp}")
         print(f"OUT: 分类：{label}")
         print()
@@ -138,24 +167,34 @@ def demo_chain_of_thought() -> None:
 
     # ── 直接回答 ───────────────────────────────────────────────────
     print("\n--- 直接回答（不引导 CoT）---")
-    resp_direct = client.chat.completions.create(
-        model=cfg.model,
-        messages=[{"role": "user", "content": question + "\n请直接给出排序结果。"}],
-    )
-    print(f"OUT: {(resp_direct.choices[0].message.content or '')[:300]}")
+    try:
+        resp_direct = client.chat.completions.create(
+            model=cfg.model,
+            messages=[{"role": "user", "content": question + "\n请直接给出排序结果。"}],
+        )
+        direct_answer = (resp_direct.choices[0].message.content or "")[:300]
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示")
+        direct_answer = _MOCK_COT_DIRECT
+    print(f"OUT: {direct_answer}")
 
     # ── CoT 引导 ───────────────────────────────────────────────────
     print("\n--- CoT 引导（请一步一步思考）---")
-    resp_cot = client.chat.completions.create(
-        model=cfg.model,
-        messages=[
-            {
-                "role": "user",
-                "content": question + "\n请一步一步思考，分析每个任务的紧急程度和所需时间，然后给出排序。",
-            }
-        ],
-    )
-    print(f"OUT: {(resp_cot.choices[0].message.content or '')[:500]}")
+    try:
+        resp_cot = client.chat.completions.create(
+            model=cfg.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": question + "\n请一步一步思考，分析每个任务的紧急程度和所需时间，然后给出排序。",
+                }
+            ],
+        )
+        cot_answer = (resp_cot.choices[0].message.content or "")[:500]
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示")
+        cot_answer = _MOCK_COT_REASONING
+    print(f"OUT: {cot_answer}")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -177,16 +216,20 @@ def demo_structured_output() -> None:
 
     user_input = "下周三之前要提交项目报告，需要整理数据和写总结"
 
-    resp = client.chat.completions.create(
-        model=cfg.model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input},
-        ],
-        response_format={"type": "json_object"},
-    )
+    try:
+        resp = client.chat.completions.create(
+            model=cfg.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
+            response_format={"type": "json_object"},
+        )
+        raw_json = resp.choices[0].message.content or "{}"
+    except Exception:
+        print("OUT: [提示] API 不可用，使用离线 mock 演示")
+        raw_json = _MOCK_STRUCTURED_JSON
 
-    raw_json = resp.choices[0].message.content or "{}"
     print(f"OUT: 原始 JSON：{raw_json}")
 
     # Pydantic 解析 + 校验
