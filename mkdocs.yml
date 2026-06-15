@@ -1,0 +1,71 @@
+site_name: AI Agent 入门教程
+site_description: Python + TypeScript 双视角，从基础到实战
+site_url: https://zhangshengasdf.github.io/ai-agent/
+repo_url: https://github.com/zhangshengasdf/ai-agent
+repo_name: zhangshengasdf/ai-agent
+edit_uri: edit/master/
+
+docs_dir: docs
+exclude_docs: |
+  .omo/
+  .ruff_cache/
+  package.json
+  package-lock.json
+  tsconfig.json
+  node_modules/
+  site/
+  *.pyc
+  __pycache__/
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.footer
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+  palette:
+    - scheme: default
+      primary: blue
+      toggle:
+        icon: material/brightness-7
+        name: 切换暗色模式
+    - scheme: slate
+      primary: blue
+      toggle:
+        icon: material/brightness-4
+        name: 切换亮色模式
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - 首页: README.md
+  - 第01章 · LLM 基础: 01-llm-basics/README.md
+  - 第02章 · Prompt 工程: 02-prompt-engineering/README.md
+  - 第03章 · 工具调用: 03-tool-use/README.md
+  - 第04章 · Agent 循环: 04-agent-loop/README.md
+  - 第05章 · 记忆系统: 05-memory/README.md
+  - 第06章 · 错误处理: 06-error-handling/README.md
+  - 第07章 · ReAct 推理: 07-react/README.md
+  - 第08章 · 规划系统: 08-planning/README.md
+  - 第09章 · RAG 检索: 09-rag/README.md
+  - 第10章 · 多 Agent 协作: 10-multi-agent/README.md
+  - 第11章 · 上下文工程: 11-context-engineering/README.md
+  - 第12章 · 框架设计: 12-framework-design/README.md
+  - 第13章 · 框架核心: 13-framework-core/README.md
+  - 第14章 · 框架高级特性: 14-framework-advanced/README.md
+  - 第15章 · 评估测试: 15-evaluation/README.md
+  - 第16章 · 可观测性: 16-observability/README.md
+  - 第17章 · 安全最佳实践: 17-security/README.md
+  - 速查表: CHEATSHEET.md
